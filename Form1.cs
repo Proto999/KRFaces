@@ -12,6 +12,10 @@ using System.Reflection;
 using SolidEdgeGeometry;
 using SolidEdgeAssembly;
 using SolidEdgeDraft;
+using System.Linq;
+using System.Collections.Generic;
+using System.Diagnostics;
+
 
 namespace Artem
 {
@@ -31,6 +35,9 @@ namespace Artem
         private SolidEdgePart.Profiles profiles = null;
         private SolidEdgePart.Profile profile = null;
         private SolidEdgeFrameworkSupport.Lines2d lines2D = null;
+        private SolidEdgePart.Sketch3D Sketch3D = null;
+        private SolidEdgePart.Points3D Points3D = null;
+        object vertices = null;
 
         public Form1()
         {
@@ -128,22 +135,59 @@ namespace Artem
             {
                 OleMessageFilter.Register();
 
-                
+                if (selectedPlane != null)
+                {
+                    // Clear the previously selected plane
+                    selectedPlane.Delete();
+                    selectedPlane = null;
+                }
 
-                // Получим текущую выбранную грань
+                // Get the current selected face
                 SolidEdgeGeometry.Face selectedFace = (SolidEdgeGeometry.Face)faces.Item(currentFaceIndex);
 
-                // Создадим плоскость относительно текущей выбранной грани
-                selectedPlane = sePartDocument.RefPlanes.AddParallelByDistance(
-                    selectedFace,
-                    0.0001,
-                    SolidEdgePart.ReferenceElementConstants.igNormalSide,
-                    false,
-                    Missing.Value,
-                    Missing.Value,
-                    Missing.Value);
+                // Get the vertices of the selected face
+                object[] verticesArray = (object[])selectedFace.Vertices;
 
-                
+                // Check if there are at least three vertices
+                if (verticesArray.Length < 3)
+                {
+                    Console.WriteLine("Ошибка: Недостаточно вершин для создания плоскости.");
+                    return;
+                }
+
+                // Получение координат первых трех вершин
+                double[] point1 = ((double[])verticesArray[0]).ToArray();
+                double[] point2 = ((double[])verticesArray[1]).ToArray();
+                double[] point3 = ((double[])verticesArray[2]).ToArray();
+
+                // Отладочные выводы
+                //Debug.WriteLine($"point1: X={point1[0]}, Y={point1[1]}, Z={point1[2]}");
+                //Debug.WriteLine($"point2: X={point2[0]}, Y={point2[1]}, Z={point2[2]}");
+                //Debug.WriteLine($"point3: X={point3[0]}, Y={point3[1]}, Z={point3[2]}");
+
+
+                // Создание координатной системы, проходящей через три точки
+                //CoordinateSystems coordinateSystems = (CoordinateSystems)sePartDocument.CoordinateSystems;
+                //CoordinateSystem coordinateSystem = coordinateSystems.AddBy3Points(
+                // point1[0], point1[1], point1[2],
+                // point2[0], point2[1], point2[2],
+                // point3[0], point3[1], point3[2]
+                // );
+
+                // Получение плоскости относительно координатной системы
+                //selectedPlane = (RefPlane)sePartDocument.RefPlanes.AddByCoordinateSystem(
+                //coordinateSystem
+                //);
+
+                if (selectedPlane == null)
+                {
+                    Console.WriteLine("Ошибка: Плоскость не создана.");
+                }
+                else
+                {
+                    // Отображение результата в Solid Edge с использованием методов управления видимостью
+                    seApplication.StartCommand(SolidEdgeConstants.PartCommandConstants.PartViewFit);
+                }
             }
             catch (Exception ex)
             {

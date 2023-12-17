@@ -16,7 +16,6 @@ using System.Linq;
 using System.Collections.Generic;
 using System.Diagnostics;
 
-
 namespace Artem
 {
     public partial class Form1 : Form
@@ -37,7 +36,10 @@ namespace Artem
         private SolidEdgeFrameworkSupport.Lines2d lines2D = null;
         private SolidEdgePart.Sketch3D Sketch3D = null;
         private SolidEdgePart.Points3D Points3D = null;
-        object vertices = null;
+        private object vertices = null;
+
+        private int currentPlaneIndex = 1;
+        private SolidEdgeFramework.SelectSet selectSet = null;
 
         public Form1()
         {
@@ -57,9 +59,9 @@ namespace Artem
                 }
 
                 panel = new Panel();
-                panel.AutoScroll = false;
+                panel.AutoScroll = true;
                 panel.Location = new System.Drawing.Point(0, 0);
-                panel.Size = new System.Drawing.Size(500, 100);
+                panel.Size = new System.Drawing.Size(500, 300);
                 Controls.Add(panel);
 
                 Button btnNextFace = new Button();
@@ -78,13 +80,39 @@ namespace Artem
                 btnPreviousFace.Click += btnPreviousFace_Click;
                 panel.Controls.Add(btnPreviousFace);
 
+                Button btnNextPlane = new Button();
+                btnNextPlane.Text = "Следующая плоскость";
+                btnNextPlane.Top = 70;
+                btnNextPlane.Left = 20;
+                btnNextPlane.Width = 200;
+                btnNextPlane.Click += btnNextPlane_Click;
+                panel.Controls.Add(btnNextPlane);
+
+                Button btnPreviousPlane = new Button();
+                btnPreviousPlane.Text = "Предыдущая плоскость";
+                btnPreviousPlane.Top = 70;
+                btnPreviousPlane.Left = 250;
+                btnPreviousPlane.Width = 200;
+                btnPreviousPlane.Click += btnPreviousPlane_Click;
+                panel.Controls.Add(btnPreviousPlane);
+
                 Button btnGetSketch = new Button();
-                btnGetSketch.Text = "Создать эскиз";
-                btnGetSketch.Top = 50;
+                btnGetSketch.Text = "Создать эскиз по грани";
+                btnGetSketch.Top = 110;
                 btnGetSketch.Left = 135;
                 btnGetSketch.Width = 200;
                 btnGetSketch.Click += btnGetSketch_Click;
                 panel.Controls.Add(btnGetSketch);
+
+
+
+                Button btnGetSketchPlane = new Button();
+                btnGetSketchPlane.Text = "Создать эскиз по плоскости";
+                btnGetSketchPlane.Top = 145;
+                btnGetSketchPlane.Left = 135;
+                btnGetSketchPlane.Width = 200;
+                btnGetSketchPlane.Click += applySelectedPlane_Click;
+                panel.Controls.Add(btnGetSketchPlane);
 
                 sePartDocument = (PartDocument)seApplication.ActiveDocument;
 
@@ -96,6 +124,9 @@ namespace Artem
                 faceStyle = (FaceStyle)faceStyles.Item(3);
 
                 ApplyFaceStyle(currentFaceIndex);
+
+                selectSet = sePartDocument.SelectSet;
+                refPlanes = GetRefPlanesFromActiveDocument();
             }
             catch (Exception ex)
             {
@@ -129,6 +160,119 @@ namespace Artem
             ApplyFaceStyle(currentFaceIndex);
         }
 
+        private void btnNextPlane_Click(object sender, EventArgs e)
+        {
+            if (refPlanes != null)
+            {
+                selectSet.RemoveAll();
+                currentPlaneIndex = Math.Min(currentPlaneIndex + 1, refPlanes.Count);
+                selectedPlane = refPlanes.Item(currentPlaneIndex);
+                //ApplySelectedPlane();
+                selectSet.Add(selectedPlane);
+            }
+        }
+
+        private void btnPreviousPlane_Click(object sender, EventArgs e)
+        {
+            if (refPlanes != null)
+            {
+                currentPlaneIndex = Math.Max(currentPlaneIndex - 1, 1);
+                selectedPlane = refPlanes.Item(currentPlaneIndex);
+                //ApplySelectedPlane();
+                //UpdateInterfaceForCurrentPlane();
+            }
+        }
+
+        private void applySelectedPlane_Click(object sender, EventArgs e)
+        {
+            ApplySelectedPlane();
+        }
+
+        private void ApplySelectedPlane()
+        {
+            if (selectedPlane != null)
+            {
+                CreateSketchOnSelectedPlane(selectedPlane);
+                //UpdateInterfaceForCurrentPlane();
+            }
+        }
+
+        private void CreateSketchOnSelectedPlane(SolidEdgePart.RefPlane plane)
+        {
+            try
+            {
+                OleMessageFilter.Register();
+
+                seApplication.DoIdle();
+
+                sketchs = sePartDocument.Sketches;
+                sketch = sketchs.Add();
+                profiles = sketch.Profiles;
+                profile = profiles.Add(plane);
+                lines2D = profile.Lines2d;
+
+                lines2D.AddBy2Points(0, 0, 1, 0);
+                lines2D.AddBy2Points(1, 0, 1, 1);
+                lines2D.AddBy2Points(1, 1, 0, 1);
+                lines2D.AddBy2Points(0, 1, 0, 0);
+
+                profile.End(SolidEdgePart.ProfileValidationType.igProfileClosed);
+
+                System.Threading.Thread.Sleep(500);
+
+
+                seApplication.StartCommand(SolidEdgeConstants.PartCommandConstants.PartViewISOView);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message);
+            }
+            finally
+            {
+                OleMessageFilter.Unregister();
+            }
+        }
+
+        private SolidEdgePart.RefPlanes GetRefPlanesFromActiveDocument()
+        {
+            SolidEdgePart.RefPlanes refPlanes = null;
+
+            try
+            {
+                refPlanes = sePartDocument.RefPlanes;
+
+                if (refPlanes == null || refPlanes.Count == 0)
+                {
+                    MessageBox.Show("В документе нет плоскостей.");
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка при получении плоскостей: {ex.Message}");
+            }
+
+            return refPlanes;
+        }
+
+        public static void CreatePlaneRelativeToFaceUsingCoordinateSystem(SolidEdgePart.PartDocument partDocument, int faceIndex, RefPlanes refPlanes, int currentFaceIndex, Faces faces, Face face)
+        {
+            Models models = partDocument.Models;
+            Model model = models.Item(1);
+            // Get the current selected face
+            SolidEdgeGeometry.Face selectedFace = (SolidEdgeGeometry.Face)faces.Item(currentFaceIndex);
+            CoordinateSystems coordinateSystems1 = partDocument.CoordinateSystems;
+            //CoordinateSystems coordinateSystems = model.CoordinateSystems;
+            CoordinateSystem coordinateSystem = coordinateSystems1.Item(1); // Выбираем первую систему координат
+
+            double centerX, centerY, centerZ;
+            //face.GetParamOnFace(out centerX, out centerY, out centerZ);
+
+            double normalX, normalY, normalZ;
+           // face.GetNormal(out normalX, out normalY, out normalZ);
+
+            //RefPlane refPlane = refPlanes.AddRelativeToCoordinateSystem(centerX, centerY, centerZ, normalX, normalY, normalZ, coordinateSystem);
+        }
+
         private void btnGetSketch_Click(object sender, EventArgs e)
         {
             try
@@ -145,50 +289,55 @@ namespace Artem
                 // Get the current selected face
                 SolidEdgeGeometry.Face selectedFace = (SolidEdgeGeometry.Face)faces.Item(currentFaceIndex);
 
-                // Get the vertices of the selected face
-                object[] verticesArray = (object[])selectedFace.Vertices;
+                // Получение ребер грани
+                SolidEdgeGeometry.Edges edges = selectedFace.Edges as SolidEdgeGeometry.Edges;
 
-                // Check if there are at least three vertices
-                if (verticesArray.Length < 3)
+                // Проверка наличия ребер и создание плоскости
+                if (edges != null && edges.Count > 0)
                 {
-                    Console.WriteLine("Ошибка: Недостаточно вершин для создания плоскости.");
-                    return;
-                }
+                    // Выбираем первое ребро для определения направления плоскости
+                    SolidEdgeGeometry.Edge firstEdge = edges.Item(1) as SolidEdgeGeometry.Edge;
 
-                // Получение координат первых трех вершин
-                double[] point1 = ((double[])verticesArray[0]).ToArray();
-                double[] point2 = ((double[])verticesArray[1]).ToArray();
-                double[] point3 = ((double[])verticesArray[2]).ToArray();
+                    // Проверка наличия первого ребра
+                    if (firstEdge != null)
+                    {
+                        // Получаем координаты первой вершины первого ребра
+                        double[] vertexCoordinates = firstEdge.StartVertex as double[];
 
-                // Отладочные выводы
-                //Debug.WriteLine($"point1: X={point1[0]}, Y={point1[1]}, Z={point1[2]}");
-                //Debug.WriteLine($"point2: X={point2[0]}, Y={point2[1]}, Z={point2[2]}");
-                //Debug.WriteLine($"point3: X={point3[0]}, Y={point3[1]}, Z={point3[2]}");
+                        // Определение точки на новой плоскости (выбранной вершиной)
+                        double[] origin = vertexCoordinates;
 
+                        // Расстояние для плоскости, которое можно настроить в соответствии с вашими потребностями
+                        double distance = 0.01; // Замените на необходимое расстояние
 
-                // Создание координатной системы, проходящей через три точки
-                //CoordinateSystems coordinateSystems = (CoordinateSystems)sePartDocument.CoordinateSystems;
-                //CoordinateSystem coordinateSystem = coordinateSystems.AddBy3Points(
-                // point1[0], point1[1], point1[2],
-                // point2[0], point2[1], point2[2],
-                // point3[0], point3[1], point3[2]
-                // );
+                        // Получаем направление плоскости из нормали первой вершины
+                        double[] normal = firstEdge.StartVertex as double[];
 
-                // Получение плоскости относительно координатной системы
-                //selectedPlane = (RefPlane)sePartDocument.RefPlanes.AddByCoordinateSystem(
-                //coordinateSystem
-                //);
+                        // Создаем точку для опоры
+                        double[] pivotPoint = new double[] { 1.0, 2.0, 3.0 };
+                        double[] pivotOrigin = new double[] { 0.0, 0.0, 0.0 }; // Например, центр масс объекта
+                        bool flipNormal = false; // или true, в зависимости от требований
 
-                if (selectedPlane == null)
-                {
-                    Console.WriteLine("Ошибка: Плоскость не создана.");
-                }
-                else
-                {
-                    // Отображение результата в Solid Edge с использованием методов управления видимостью
-                    seApplication.StartCommand(SolidEdgeConstants.PartCommandConstants.PartViewFit);
-                }
+                        if (normal != null && normal.Length >= 3)
+                        {
+                            // Создание новой плоскости параллельной грани с использованием расстояния
+                            SolidEdgePart.RefPlane parallelPlane = sePartDocument.RefPlanes.AddParallelByTangent(
+                                ParentPlane: refPlanes.Item(1),
+                                selectedFace,
+                                TangentPositionFlag: SolidEdgePart.KeyPointExtentConstants.igTangentNormal,
+                                Pivot: pivotPoint,
+                                PivotOrigin: pivotOrigin,
+                                Local: null
+                                                         );
+
+                            // Теперь у вас есть новая плоскость, параллельная выбранной грани
+                        }
+                            }
+                        }
+                    
+               
             }
+
             catch (Exception ex)
             {
                 MessageBox.Show(ex.Message);
@@ -197,6 +346,7 @@ namespace Artem
             {
                 OleMessageFilter.Unregister();
             }
+            }
         }
-    }
 }
+

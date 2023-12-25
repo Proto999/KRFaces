@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Windows.Forms;
 using SolidEdgeCommunity;
 using SolidEdgeFramework;
@@ -15,6 +15,7 @@ using SolidEdgeDraft;
 using System.Linq;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Drawing;
 
 namespace Artem
 {
@@ -40,6 +41,9 @@ namespace Artem
 
         private int currentPlaneIndex = 1;
         private SolidEdgeFramework.SelectSet selectSet = null;
+
+        private System.Windows.Forms.TextBox txtLength;
+        private System.Windows.Forms.TextBox txtWidth;
 
         public Form1()
         {
@@ -98,21 +102,46 @@ namespace Artem
 
                 Button btnGetSketch = new Button();
                 btnGetSketch.Text = "Создать эскиз по грани";
-                btnGetSketch.Top = 110;
+                btnGetSketch.Top = 175;
                 btnGetSketch.Left = 135;
                 btnGetSketch.Width = 200;
                 btnGetSketch.Click += btnGetSketch_Click;
                 panel.Controls.Add(btnGetSketch);
 
-
-
                 Button btnGetSketchPlane = new Button();
                 btnGetSketchPlane.Text = "Создать эскиз по плоскости";
-                btnGetSketchPlane.Top = 145;
+                btnGetSketchPlane.Top = 205;
                 btnGetSketchPlane.Left = 135;
                 btnGetSketchPlane.Width = 200;
                 btnGetSketchPlane.Click += applySelectedPlane_Click;
                 panel.Controls.Add(btnGetSketchPlane);
+
+                // Создание поля для ввода длины
+                txtLength = new System.Windows.Forms.TextBox();
+                txtLength.Top = 130;
+                txtLength.Left = 20;
+                txtLength.Width = 100;
+                panel.Controls.Add(txtLength);
+
+                txtWidth = new System.Windows.Forms.TextBox();
+                txtWidth.Top = 130;
+                txtWidth.Left = 130;
+                txtWidth.Width = 100;
+                panel.Controls.Add(txtWidth);
+
+                Label lblLength = new Label();
+                lblLength.Text = "Длина (метр.):";
+                lblLength.Top = 110;
+                lblLength.Left = 20;
+                lblLength.Width = 90;
+                panel.Controls.Add(lblLength);
+
+                Label lblWidth = new Label();
+                lblWidth.Text = "Ширина (метр.):";
+                lblWidth.Top = 110;
+                lblWidth.Left = 140;
+                lblWidth.Width = 90;
+                panel.Controls.Add(lblWidth);
 
                 sePartDocument = (PartDocument)seApplication.ActiveDocument;
 
@@ -185,19 +214,28 @@ namespace Artem
 
         private void applySelectedPlane_Click(object sender, EventArgs e)
         {
-            ApplySelectedPlane();
-        }
+            double length, width;
 
-        private void ApplySelectedPlane()
-        {
-            if (selectedPlane != null)
+            if (double.TryParse(txtLength.Text, out length) && double.TryParse(txtWidth.Text, out width))
             {
-                CreateSketchOnSelectedPlane(selectedPlane);
-                //UpdateInterfaceForCurrentPlane();
+                ApplySelectedPlane(length, width);
+            }
+            else
+            {
+                MessageBox.Show("Введите корректные значения для Длины и Ширины.");
             }
         }
 
-        private void CreateSketchOnSelectedPlane(SolidEdgePart.RefPlane plane)
+        private void ApplySelectedPlane(double length, double width)
+        {
+            if (selectedPlane != null)
+            {
+                CreateSketchOnSelectedPlane(selectedPlane, length, width);
+            }
+        }
+
+
+        private void CreateSketchOnSelectedPlane(SolidEdgePart.RefPlane plane, double length, double width)
         {
             try
             {
@@ -211,10 +249,11 @@ namespace Artem
                 profile = profiles.Add(plane);
                 lines2D = profile.Lines2d;
 
-                lines2D.AddBy2Points(0, 0, 1, 0);
-                lines2D.AddBy2Points(1, 0, 1, 1);
-                lines2D.AddBy2Points(1, 1, 0, 1);
-                lines2D.AddBy2Points(0, 1, 0, 0);
+                lines2D.AddBy2Points(0, 0, length, 0);
+                lines2D.AddBy2Points(length, 0, length, width);
+                lines2D.AddBy2Points(length, width, 0, width);
+                lines2D.AddBy2Points(0, width, 0, 0);
+
 
                 profile.End(SolidEdgePart.ProfileValidationType.igProfileClosed);
 
@@ -252,25 +291,6 @@ namespace Artem
             }
 
             return refPlanes;
-        }
-
-        public static void CreatePlaneRelativeToFaceUsingCoordinateSystem(SolidEdgePart.PartDocument partDocument, int faceIndex, RefPlanes refPlanes, int currentFaceIndex, Faces faces, Face face)
-        {
-            Models models = partDocument.Models;
-            Model model = models.Item(1);
-            // Get the current selected face
-            SolidEdgeGeometry.Face selectedFace = (SolidEdgeGeometry.Face)faces.Item(currentFaceIndex);
-            CoordinateSystems coordinateSystems1 = partDocument.CoordinateSystems;
-            //CoordinateSystems coordinateSystems = model.CoordinateSystems;
-            CoordinateSystem coordinateSystem = coordinateSystems1.Item(1); // Выбираем первую систему координат
-
-            double centerX, centerY, centerZ;
-            //face.GetParamOnFace(out centerX, out centerY, out centerZ);
-
-            double normalX, normalY, normalZ;
-           // face.GetNormal(out normalX, out normalY, out normalZ);
-
-            //RefPlane refPlane = refPlanes.AddRelativeToCoordinateSystem(centerX, centerY, centerZ, normalX, normalY, normalZ, coordinateSystem);
         }
 
         private void btnGetSketch_Click(object sender, EventArgs e)
